@@ -191,7 +191,7 @@ elif section == "Parameter Configuration":
     st.session_state.sticking_prob = st.slider("Sticking Probability", 0.0, 1.0, st.session_state.sticking_prob)
     st.write("**Configured Parameters:**")
     st.write(f"- Coefficient of Restitution: {st.session_state.coeff_restitution}")
-    st.write(f"- Sticking Probability: {st.session_state.sticking_prob} (Used in Laser Clading for adhesion)")
+    st.write(f"- Sticking Probability: {st.session_state.sticking_prob} (Used in Laser Cladding for adhesion)")
     if st.button("Save Configuration"):
         config = {
             "CoefficientOfRestitution": st.session_state.coeff_restitution,
@@ -268,16 +268,17 @@ elif section == "Visualization":
         """)
 
     # Common simulation parameters
-    dt = 0.01  # Time step
+    dt = 0.001  # Time step (reduced for stability)
     t_max = 2.0  # Simulation time
     t = np.arange(0, t_max, dt)
     m_p = 1e-6  # Particle mass (kg)
     rho = 1.2  # Fluid density (kg/m^3)
-    d_p = 5e-4  # Particle diameter (m), increased for stronger drag
+    d_p = 5e-4  # Particle diameter (m)
     C_d = 0.47  # Drag coefficient
     A_p = np.pi * (d_p / 2) ** 2  # Particle cross-sectional area
     g = 9.81  # Gravity (m/s^2)
     wall_y = 0.0  # Wall at y=0
+    v_rel_max = 50.0  # Maximum relative velocity (m/s)
 
     # Air-Fuel Interaction Mode
     if mode == "Air-Fuel Interaction":
@@ -335,7 +336,12 @@ elif section == "Visualization":
                     u_f = np.array([u_f_x, u_f_y]) + turbulence_intensity * np.random.normal(0, jet_strength, 2)
                     v_rel = vel[i-1, p] - u_f
                     v_rel_mag = np.sqrt(v_rel[0]**2 + v_rel[1]**2)
-                    F_drag = 0.5 * rho * C_d * A_p * v_rel_mag * v_rel
+                    v_rel_mag = min(v_rel_mag, v_rel_max)  # Cap relative velocity
+                    if v_rel_mag > 0:
+                        v_rel_unit = v_rel / v_rel_mag
+                    else:
+                        v_rel_unit = np.zeros(2)
+                    F_drag = 0.5 * rho * C_d * A_p * v_rel_mag * (v_rel_mag * v_rel_unit)
                     drag_force[i, p] = F_drag
                     F_gravity = np.array([0.0, -m_p * g])
                     F_total = F_drag + F_gravity
@@ -417,7 +423,7 @@ elif section == "Visualization":
 
         # User inputs
         jet_strength = st.slider("Carrier Gas Jet Strength (m/s)", 0.0, 10.0, 5.0)
-        recoil_strength = st.slider("Recoil Pressure Strength (N)", 0.0, 0.0002, 0.00005, step=1e-6)
+        recoil_strength = st.slider("Recoil Pressure Strength (N)", 0.0, 5e-5, 1e-5, step=1e-6)
         st.write(f"Selected Recoil Strength: {recoil_strength} N")
         coeff_restitution = st.session_state.coeff_restitution
         sticking_prob = st.session_state.sticking_prob
@@ -440,18 +446,21 @@ elif section == "Visualization":
         pos = np.zeros((len(t), 2))
         vel = np.zeros((len(t), 2))
         drag_force = np.zeros((len(t), 2))
-        pos[0] = [np.random.uniform(-0.1, 0.1), 5.0]  # Randomize x-start
-        vel[0] = [2.0, -2.0]
+        pos[0] = [np.random.uniform(-0.1, 0.1), 5.0]
+        vel[0] = [0.5, -1.0]  # More realistic initial velocity
         stuck = False
         stick_time = None
         collisions = []
         outcome = None
+        max_v_rel = 0.0
+        max_F_drag = 0.0
 
         # Simulate
         for i in range(1, len(t)):
             if stuck:
                 pos[i] = pos[i-1]
                 vel[i] = [0.0, 0.0]
+                drag_force[i] = [0.0, 0.0]  # Zero drag force after sticking
                 continue
 
             u_f_x = jet_strength * np.exp(-((pos[i-1, 0]**2 + (pos[i-1, 1]-3)**2) / 0.5))
@@ -459,8 +468,17 @@ elif section == "Visualization":
             u_f = np.array([u_f_x, u_f_y])
             v_rel = vel[i-1] - u_f
             v_rel_mag = np.sqrt(v_rel[0]**2 + v_rel[1]**2)
-            F_drag = 0.5 * rho * C_d * A_p * v_rel_mag * v_rel
+            max_v_rel = max(max_v_rel, v_rel_mag)
+            v_rel_mag = min(v_rel_mag, v_rel_max)  # Cap relative velocity
+            if v_rel_mag > 0:
+                v_rel_unit = v_rel / v_rel_mag
+            else:
+                v_rel_unit = np.zeros(2)
+            F_drag = 0.5 * rho * C_d * A_p * v_rel_mag * (v_rel_mag * v_rel_unit)
+            if not np.isfinite(F_drag).all():
+                F_drag = np.zeros(2)  # Prevent overflow
             drag_force[i] = F_drag
+            max_F_drag = max(max_F_drag, np.sqrt(F_drag[0]**2 + F_drag[1]**2))
             F_gravity = np.array([0.0, -m_p * g])
             F_recoil = np.array([0.0, recoil_strength]) if t[i] < 1.0 else np.array([0.0, 0.0])
             F_total = F_drag + F_gravity + F_recoil
@@ -480,6 +498,9 @@ elif section == "Visualization":
                     pos[i, 1] = wall_y
                     collisions.append((t[i], pos[i, 0], pos[i, 1], 'bounce'))
                     outcome = 'bounce'
+
+        # Debug output (remove in production)
+        st.write(f"Debug: Max |v_rel| = {max_v_rel:.2f} m/s, Max |F_drag| = {max_F_drag:.2e} N")
 
         # Update outcome history
         if outcome:
@@ -548,4 +569,4 @@ elif section == "Visualization":
 
 # Footer
 st.markdown("---")
-st.markdown("Built with Streamlit for educational purposes.")
+st.markdown("Eulerian and Lagrangian Methods in Computational Fluid Mechanics.")
