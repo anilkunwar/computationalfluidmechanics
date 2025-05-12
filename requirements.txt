@@ -1,7 +1,6 @@
 streamlit
 scikit-learn
 matplotlib
-yaml
 pyyaml
 numpy
 markdown-it-py 
