@@ -4,5 +4,5 @@ The Eulerian-Lagrangian framework will be useful for scaling up the CFD simulati
 [![Drag coefficient estimation via Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://dragcoefficientfromreynoldsnumber.streamlit.app/)
 
 
-# Explanation and visual illustration of Eulerian-Lagrangian Methods
+# Explanation and visual illustration of Eulerian-Lagrangian Methods in context of the Air-Fuel Interaction and Laser Cladding Phenomena
 [![Understanding the concepts of Eulerian Lagrangian Methods  via Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://eulerianandlagrangianmethods.streamlit.app/)
